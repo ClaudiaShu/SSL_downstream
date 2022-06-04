@@ -8,9 +8,9 @@ from torch import nn
 from torch.backends import cudnn
 from torch.utils.data import DataLoader
 
-from ABAW_img import ABAW_trainer
-from data_aug import get_image_transform
-from data_loader import Aff2_Dataset_series_shuffle, Aff2_Dataset_static_shuffle
+from ABAW_aud import ABAW_trainer
+from data_aug import get_image_transform, get_audio_transform
+from data_loader import Aff2_Dataset_series_shuffle, Aff2_Dataset_static_shuffle, Aff2_Dataset_audio
 from models.model_R3D_DFEW import DFEW_SSL
 from models.model_RES import RES_SSL
 from models.model_RES_imagenet import RES_feature
@@ -20,8 +20,8 @@ warnings.filterwarnings("ignore")
 device = "cuda:0" if torch.cuda.is_available() else 'cpu'
 
 parser = argparse.ArgumentParser(description='EXP Training')
-parser.add_argument('--lr', default=1e-4, type=float, help='learning rate')  # 1e-3#
-parser.add_argument('--batch_size', default=64, type=int, help='batch size')  # 256#
+parser.add_argument('--lr', default=1e-4, type=float, help='learning rate')  # 1e-4#
+parser.add_argument('--batch_size', default=8, type=int, help='batch size')  # 64#
 parser.add_argument('--epochs', default=20, type=int, help='number epochs')  # 12#
 parser.add_argument('--num_classes', default=8, type=int, help='number classes')
 parser.add_argument('--weight_decay', default=5e-4, type=float)  # 5e-4#
@@ -36,7 +36,7 @@ parser.add_argument('--warmup', type=bool, default=False)
 parser.add_argument('--optim', type=str, default='SGD')
 
 parser.add_argument('--arch', default='resnet50', type=str, help='baseline of the training network.')
-parser.add_argument('--rep', default='SSL', type=str, help='Choose methods for representation learning.') # ['SSL','pretrain']
+parser.add_argument('--rep', default='pretrain', type=str, help='Choose methods for representation learning.') # ['SSL','pretrain']
 parser.add_argument('--gpu-index', default=0, type=int, help='Gpu index.')
 parser.add_argument('--fp16-precision', action='store_true',
                     help='Whether or not to use 16-bit precision GPU training.')
@@ -48,10 +48,11 @@ args = parser.parse_args()
 
 def setup(df_train, df_valid, args):
     train_transform, test_transform = get_image_transform()
-    train_dataset = Aff2_Dataset_static_shuffle(df=df_train, root=False,
-                                                transform=train_transform)
-    valid_dataset = Aff2_Dataset_static_shuffle(df=df_valid, root=False,
-                                                transform=test_transform)
+    train_transform_aud, test_transform_aud = get_audio_transform()
+    train_dataset = Aff2_Dataset_audio(df=df_train, root=False,
+                                       transform=train_transform, transform_aud=train_transform_aud)
+    valid_dataset = Aff2_Dataset_audio(df=df_valid, root=False,
+                                       transform=test_transform, transform_aud=test_transform_aud)
 
     train_loader = DataLoader(dataset=train_dataset,
                               batch_size=args.batch_size,
@@ -81,15 +82,15 @@ def main():
 
     # train set
     df_train = create_original_data(
-        f'/mnt/c/Data/Yuxuan/ABAW/labels_save/expression/Train_Set_v2/*')
+        f'/mnt/c/Data/Yuxuan/ABAW/labels_save/expression/Train_Set_v3/*')
     # valid set
     df_valid = create_original_data(
-        f'/mnt/c/Data/Yuxuan/ABAW/labels_save/expression/Validation_Set_v2/*')
+        f'/mnt/c/Data/Yuxuan/ABAW/labels_save/expression/Validation_Set_v3/*')
 
     train_loader, valid_loader, best_acc = setup(df_train, df_valid, args)
 
     if args.rep == 'pretrain':
-        model = RES_feature(module=args.arch)
+        model = RES_feature(module=args.arch, mode='audio')
     elif args.rep == 'SSL':
         model = RES_SSL(module=args.arch)
     else:

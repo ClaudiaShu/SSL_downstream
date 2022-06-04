@@ -1,6 +1,7 @@
 import ast
 import os.path
 
+import librosa
 import numpy
 import numpy as np
 import soundfile
@@ -29,7 +30,6 @@ class Aff2_Dataset_static_shuffle(Dataset):
             self.df = df
         self.transform = transform
         self.list_labels_ex = np.array(self.df['labels_ex'].values)
-
         self.list_image_id = np.array(self.df['image_id'].values)
 
     def __getitem__(self, index):
@@ -45,6 +45,139 @@ class Aff2_Dataset_static_shuffle(Dataset):
 
     def __len__(self):
         return len(self.df)
+
+
+class Aff2_Dataset_audio(Dataset):
+    def __init__(self, root, transform, transform_aud, df=None):
+        super(Aff2_Dataset_audio, self).__init__()
+        self.prefix_aff2 = '/mnt/c/Data/Yuxuan/ABAW'
+        self.sec = 3
+        self.fps = 30
+        self.sample_rate = 22050
+
+        if root:
+            self.list_csv = glob.glob(root + '*')
+            # self.list_csv = [i for i in self.list_csv if len(pd.read_csv(i)) != 0]
+            self.df = pd.DataFrame()
+
+            for i in tqdm(self.list_csv, total=len(self.list_csv)):
+                self.df = pd.concat((self.df, pd.read_csv(i)), axis=0).reset_index(drop=True)
+        else:
+            self.df = df
+        self.transform = transform
+        self.transforms_aud = transform_aud
+        self.list_labels_ex = np.array(self.df['labels_ex'].values)
+        self.list_image_id = np.array(self.df['image_id'].values)
+
+        file = "/mnt/c/Data/Yuxuan/ABAW/image_frames.txt"
+        self.data = open(file, 'r')
+        self.videos, self.frames = self.get_frame()
+        self.data.close()
+
+        self.mapping = self.get_mapping()
+
+    def __getitem__(self, index):
+        data_info = self.mapping[index]
+        image = Image.open(data_info["Image"]).convert('RGB')
+        label = data_info["Label"]
+        audio = self.load_audio(data_info["audio_path"], data_info["Audio"])
+
+        sample = {
+            'images': self.transform(image),
+            'labels': torch.tensor(label),
+            'audios': self.transforms_aud(audio)
+        }
+        return sample
+
+    def get_frame(self):
+        videos = []
+        frames = []
+        for data_info in self.data.readlines():
+            path = data_info.split(",")[1]
+            frame = int(data_info.split(",")[2].split("\n")[0])-1
+            frame_name = path.split('/')[-1]
+
+            videos.append(frame_name)
+            frames.append(frame)
+        return videos, frames
+
+    def get_real_id(self, path):
+        # return the true id in video sequence
+        return int(path.split('/')[-1].split('.')[0])-1
+
+    def get_audio_id(self, ID, frames):
+        '''
+        length: float
+            the duration of the clip(seconds)
+        Sample rate:
+            audio: 22050; 22050
+            vid 30; 25
+        '''
+        hf_sec = self.sec/2
+        # IDA = self.sample_rate * ID / self.fps
+        ID_sec = ID/self.fps
+        total_sec = frames/self.fps
+        if ID_sec - hf_sec >= 0 and ID_sec + hf_sec < total_sec:
+            return ID_sec - hf_sec
+        # elif ID_sec - hf_sec < 0:
+            # return 0
+        else:
+            return None
+            # return total_sec - self.sec
+
+    def load_audio(self, path, offset):
+        '''
+        offset : float
+            start reading after this time (in seconds)
+
+        duration : float
+            only load up to this much audio (in seconds)
+        '''
+        duration = self.sec
+        SAMPLE_RATE = self.sample_rate
+        # offset = offset / self.fps  # Transfer ID to second
+        audio, sample_rate = librosa.load(path, duration=duration, offset=offset, sr=SAMPLE_RATE)
+        signal = np.zeros((int(SAMPLE_RATE * duration, )))
+        signal[:len(audio)] = audio
+        # signal = torch.from_numpy(signal).float()
+        return signal
+
+    def get_mapping(self):
+        mapping = {}
+        cpt = 0
+        for i in (pbar := tqdm(range(len(self.list_image_id)))):
+            path = self.list_image_id[i]
+            label = self.list_labels_ex[i]
+            video = path.split('/')[-2]
+            frames = self.frames[self.videos.index(video)]
+            # pbar_path = path.split('/')[-1]
+            pbar.set_description('Processing file %s' % video)
+
+            # img_path = glob.glob(f"{self.prefix_aff2}/origin_faces/{path}/*.jpg")
+            if '_left' in video:
+                audio_name = video[:-5]
+            elif '_right' in video:
+                audio_name = video[:-6]
+            else:
+                audio_name = video
+            audio_path = f"{self.prefix_aff2}/origin_audios/{audio_name}.wav"
+
+            idx = self.get_real_id(path)
+            a_idx = self.get_audio_id(idx, frames)
+            if a_idx is None:
+                continue
+
+            mapping[cpt] = {
+                "Image": path,
+                "Label": label,
+                "Audio": a_idx,
+                "audio_path": audio_path
+            }
+            cpt += 1
+        return mapping
+
+    def __len__(self):
+        return len(self.mapping)
 
 
 class Aff2_Dataset_series_shuffle(Dataset):

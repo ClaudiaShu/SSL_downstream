@@ -3,7 +3,7 @@ import os.path
 from torchvision import transforms as cv_tf
 from torchaudio import transforms as au_tf
 from utils import video_transforms as vd_tf
-
+from utils import audio_transforms as ad_tf
 
 from audiomentations import (
     Compose,
@@ -104,25 +104,68 @@ def get_video_transform(size):
 
     return vid1_transform, vid2_transform
 
+def get_audio_transform(sample_rate=22050):
+    musan_data = "/mnt/c/Data/Yuxuan/AudioAug/musan_all.txt"
+    musan_file = open(musan_data,'r')
+    musan = []
+    for line in musan_file.readlines():
+        musan.append(line.split('\n')[0])
+    musan_file.close()
 
-def get_audio_transform():
-    '''
-    Thanks to https://github.com/iver56/audiomentations
-    '''
-    train_transform = Compose([
-        AddGaussianNoise(min_amplitude=0.001, max_amplitude=0.015, p=0.5),
-        TimeStretch(min_rate=0.8, max_rate=1.25, p=0.5),
-        PitchShift(min_semitones=-4, max_semitones=4, p=0.5),
-        Shift(min_fraction=-0.5, max_fraction=0.5, p=0.5),
-    ])
-    test_transform = Compose([
-        # AddGaussianSNR(min_snr_in_db=5, max_snr_in_db=40.0, p=0.5),
-        # AddBackgroundNoise(sounds_path=os.path.join(ESC,'audio')),
-        TimeStretch(min_rate=0.8, max_rate=1.25, p=0.5),
-        PitchShift(min_semitones=-4, max_semitones=4, p=0.5),
-        Shift(min_fraction=-0.5, max_fraction=0.5, p=0.5),
-    ])
+    rir_data = "/mnt/c/Data/Yuxuan/AudioAug/rir_all.txt"
+    rir_file = open(rir_data, 'r')
+    rir = []
+    for line in rir_file.readlines():
+        rir.append(line.split('\n')[0])
+    rir_file.close()
+    # mel_spectrogram = au_tf.MelSpectrogram(sample_rate=sample_rate)
 
-    return train_transform, test_transform
+    aud1_transform = ad_tf.Compose([
+        ad_tf.RandomNoise(),
+        # ad_tf.ToTensor(),
+        # ad_tf.RandomRIR(data=rir),
+        # ad_tf.RandomMusan(data=musan),
+
+        # ad_tf.TensorSqueeze(),
+        ad_tf.ToMel(sample_rate),
+        ad_tf.RandomTimeMask(),
+        ad_tf.RandomFreqMask(),
+        cv_tf.Resize(112),
+        # cv_tf.Normalize(mean=0.356, std=0.04)
+        # Normalize
+    ])
+    aud2_transform = ad_tf.Compose([
+        # ad_tf.RandomNoise(),
+        ad_tf.ToTensor(),
+        # ad_tf.RandomRIR(data=rir),
+        # ad_tf.RandomMusan(data=musan),
+
+        ad_tf.TensorUnSqueeze(),
+        ad_tf.ToMel(sample_rate),
+        # ad_tf.RandomTimeMask(),
+        # ad_tf.RandomFreqMask(),
+        cv_tf.Resize(112)
+    ])
+    return aud1_transform, aud2_transform
+
+# def get_audio_transform():
+#     '''
+#     Thanks to https://github.com/iver56/audiomentations
+#     '''
+#     train_transform = Compose([
+#         AddGaussianNoise(min_amplitude=0.001, max_amplitude=0.015, p=0.5),
+#         TimeStretch(min_rate=0.8, max_rate=1.25, p=0.5),
+#         PitchShift(min_semitones=-4, max_semitones=4, p=0.5),
+#         Shift(min_fraction=-0.5, max_fraction=0.5, p=0.5),
+#     ])
+#     test_transform = Compose([
+#         # AddGaussianSNR(min_snr_in_db=5, max_snr_in_db=40.0, p=0.5),
+#         # AddBackgroundNoise(sounds_path=os.path.join(ESC,'audio')),
+#         TimeStretch(min_rate=0.8, max_rate=1.25, p=0.5),
+#         PitchShift(min_semitones=-4, max_semitones=4, p=0.5),
+#         Shift(min_fraction=-0.5, max_fraction=0.5, p=0.5),
+#     ])
+#
+#     return train_transform, test_transform
 
 
