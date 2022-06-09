@@ -19,7 +19,8 @@ class ABAW_trainer(object):
         self.model = kwargs['model'].to(self.args.device)
         self.optimizer = kwargs['optimizer']
         self.scheduler = kwargs['scheduler']
-        self.criterion = torch.nn.CrossEntropyLoss().to(self.args.device)
+        # self.criterion = torch.nn.CrossEntropyLoss().to(self.args.device)
+        self.criterion = kwargs['criterion']
 
         self.mode = self.args.mode
         self.best_acc = best_acc
@@ -125,13 +126,10 @@ class ABAW_trainer(object):
 
         cat_preds = np.concatenate(cat_preds, axis=0)
         cat_labels = np.concatenate(cat_labels, axis=0)
-        top1, top5 = accuracy_top(cat_preds, cat_labels, topk=(1, 5))
         cm = confusion_matrix(cat_labels, cat_preds)
         cr = classification_report(cat_labels, cat_preds)
         f1, acc, total = EXPR_metric(cat_preds, cat_labels)
         print('train mode: \n'
-              f'top1 = {top1} \n'
-              f'top5 = {top5} \n'
               f'f1 = {f1} \n'
               f'acc = {acc} \n'
               f'total = {total} \n',
@@ -142,18 +140,6 @@ class ABAW_trainer(object):
         logfile.write('Title\nf1: {}\nAccuracy: {}\nTotal: {}'.format(f1, acc, total))
         # logging.debug(
         #     f"train mode\tEpoch: {epoch}\tf1:{f1}\tacc:{acc}\ttotal:{total}")
-        if f1 >= self.best_acc:
-            self.best_acc = f1
-            checkpoint_name = 'checkpoint_best.pth.tar'.format(epoch)
-            save_checkpoint({
-                'epoch': epoch,
-                'state_dict': self.model.state_dict(),
-                'optimizer': self.optimizer.state_dict(),
-                'scheduler': self.scheduler.state_dict(),
-                'f1': f1,
-                'Accuracy': acc,
-                'Total': total
-            }, is_best=False, filename=os.path.join(self.writer.log_dir, checkpoint_name))
 
 
     def valid(self, epoch, valid_loader, t, logfile):
@@ -180,21 +166,17 @@ class ABAW_trainer(object):
 
                 cat_preds.append(pred_cat.detach().cpu().numpy())
                 cat_labels.append(labels_cat.detach().cpu().numpy())
-                t.set_postfix(Lr=self.optimizer.param_groups[0]['lr'],
-                              Loss=f'{cost_list / (batch_idx + 1):04f}')
+                t.set_postfix(Loss=f'{cost_list / (batch_idx + 1):04f}')
 
                 # logging.debug(f"Valid mode\tEpoch: {epoch}\tLoss: {loss}")
                 self.v_iter += 1
 
             cat_preds = np.concatenate(cat_preds, axis=0)
             cat_labels = np.concatenate(cat_labels, axis=0)
-            top1, top5 = accuracy_top(cat_preds, cat_labels, topk=(1, 5))
             cm = confusion_matrix(cat_labels, cat_preds)
             cr = classification_report(cat_labels, cat_preds)
             f1, acc, total = EXPR_metric(cat_preds, cat_labels)
             print('valid mode: \n'
-                  f'top1 = {top1} \n'
-                  f'top5 = {top5} \n'
                   f'f1 = {f1} \n'
                   f'acc = {acc} \n'
                   f'total = {total} \n',
@@ -203,6 +185,19 @@ class ABAW_trainer(object):
             cm_ = np.array2string(cm)
             logfile.write('Valid\n\nClassification Report\n\n{}\n\nConfusion Matrix\n\n{}\n'.format(cr, cm_))
             logfile.write('Title\nf1: {}\nAccuracy: {}\nTotal: {}'.format(f1, acc, total))
+
+            if f1 >= self.best_acc:
+                self.best_acc = f1
+                checkpoint_name = 'checkpoint_best.pth.tar'.format(epoch)
+                save_checkpoint({
+                    'epoch': epoch,
+                    'state_dict': self.model.state_dict(),
+                    'optimizer': self.optimizer.state_dict(),
+                    'scheduler': self.scheduler.state_dict(),
+                    'f1': f1,
+                    'Accuracy': acc,
+                    'Total': total
+                }, is_best=False, filename=os.path.join(self.writer.log_dir, checkpoint_name))
 
             # logging.debug(
             #     f"valid mode\tEpoch: {epoch}\tf1:{f1}\tacc:{acc}\ttotal:{total}")

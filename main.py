@@ -11,11 +11,15 @@ from torch.utils.data import DataLoader
 from ABAW_main import ABAW_trainer
 from data_aug import get_image_transform, get_audio_transform
 from data_loader import AFFECTNET_Dataset, Aff2_Dataset_static_shuffle, Aff2_Dataset_audio
+from loss.balanced_softmax_cross_entropy_loss import BalancedSoftmaxCE
+from loss.class_balanced_loss import ClassBalanceCE
 from models.model_R3D_DFEW import DFEW_SSL
 from models.model_RES import RES_SSL
 from models.model_RES_imagenet import RES_feature
-from utils import seed_everything, create_original_data
+from utils import seed_everything, create_original_data, FocalLoss
 from utils.prefetch_dataloader import DataLoaderX
+
+from config import *
 
 warnings.filterwarnings("ignore")
 device = "cuda:0" if torch.cuda.is_available() else 'cpu'
@@ -24,17 +28,17 @@ parser = argparse.ArgumentParser(description='EXP Training')
 parser.add_argument('--comment', type=str, default='')
 parser.add_argument('--lr', default=1e-4, type=float, help='learning rate')  # 1e-4#
 parser.add_argument('--batch_size', default=64, type=int, help='batch size')  # 64#
-parser.add_argument('--epochs', default=20, type=int, help='number epochs')  # 12#
+parser.add_argument('--epochs', default=20, type=int, help='number epochs')  # 20#
 parser.add_argument('--num_classes', default=8, type=int, help='number classes')
-parser.add_argument('--weight_decay', default=5e-4, type=float)  # 5e-4#
+parser.add_argument('-weight_decay', default=5e-4, type=float)  # 5e-4#
 parser.add_argument('--seq_len', default=3, type=int)
 parser.add_argument('--sec', default=1)
 parser.add_argument('--num_workers', default=12, type=int)
-parser.add_argument('--resume', type=bool, default=True)
+parser.add_argument('--resume', type=bool, default=False)
 
-parser.add_argument('--loss', type=str, default='CrossEntropyLoss')  # ['CrossEntropyLabelAwareSmooth','SuperContrastive']
-parser.add_argument('--warmup', type=bool, default=False)
-parser.add_argument('--optim', type=str, default='ADAM')
+# parser.add_argument('--loss', type=str, default='CrossEntropyLoss')  # ['CrossEntropyLabelAwareSmooth','SuperContrastive']
+# parser.add_argument('--warmup', type=bool, default=False)
+# parser.add_argument('--optim', type=str, default='ADAM')
 
 parser.add_argument('--arch', default='resnet50', type=str, help='baseline of the training network.')
 parser.add_argument('--rep', default='pretrain', type=str, help='Choose methods for representation learning.') # ['SSL','pretrain']
@@ -152,7 +156,18 @@ def main():
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_steps, eta_min=0,
                                                            last_epoch=-1)
 
-    # criterion = nn.CrossEntropyLoss()
+    num_class_list = [74874, 134415, 25459, 14090, 6378, 3803, 24882, 3750]
+    para_dict = {
+        "num_classes": args.num_classes,
+        "num_class_list": num_class_list,
+        "device": device,
+        "cfg": cfg_loss,
+    }
+    # criterion = nn.CrossEntropyLoss().to(args.device)
+    # criterion = FocalLoss(args.num_classes, batch_size=args.batch_size).to(args.device)
+    criterion = ClassBalanceCE(para_dict).to(args.device)
+    # criterion = BalancedSoftmaxCE(para_dict).to(args.device)
+
     optimizer.zero_grad()
     optimizer.step()
 
@@ -179,7 +194,12 @@ def main():
 
     #  It’s a no-op if the 'gpu_index' argument is a negative integer or None.
     with torch.cuda.device(args.gpu_index):
-        exp_train = ABAW_trainer(best_acc, model=model, optimizer=optimizer, scheduler=scheduler, args=args)
+        exp_train = ABAW_trainer(best_acc,
+                                 model=model,
+                                 optimizer=optimizer,
+                                 scheduler=scheduler,
+                                 criterion=criterion,
+                                 args=args)
         exp_train.run(train_loader, valid_loader)
 
 
