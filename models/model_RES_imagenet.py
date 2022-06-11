@@ -10,7 +10,7 @@ class RES_feature(nn.Module):
         self.args = kwargs['args']
         module = self.args.arch
         mode = self.args.mode
-        num_classes = self.args.num_classes
+        num_classes = 8 if self.args.task == 'exp' else 2
 
         super(RES_feature, self).__init__()
         if module=='resnet18':

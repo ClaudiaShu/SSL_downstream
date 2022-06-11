@@ -6,7 +6,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import yaml
-from sklearn.metrics import f1_score, accuracy_score, average_precision_score, precision_recall_curve, confusion_matrix
+from sklearn.metrics import f1_score, accuracy_score, \
+    average_precision_score, precision_recall_curve
+from sklearn.metrics import classification_report, \
+    confusion_matrix, mean_squared_error, matthews_corrcoef
 from torch.autograd import Variable
 from torch.nn import MSELoss, CrossEntropyLoss, L1Loss, SmoothL1Loss
 import sklearn
@@ -185,8 +188,10 @@ def info_nce_loss(self, features):
     return logits, labels
 
 def VA_metric(x, y):
+    rmse = [mean_squared_error(y[:, 0], x[:, 0]),mean_squared_error(y[:, 1], x[:, 1])]
+    coff = [np.corrcoef(y[:, 0], x[:, 0])[0][1],np.corrcoef(y[:, 1], x[:, 1])[0][1]]
     items = [CCC_score(x[:, 0], y[:, 0]), CCC_score(x[:, 1], y[:, 1])]
-    return items, np.mean(items)
+    return rmse, coff, items, np.mean(items)
 
 
 def EXPR_metric(y_pred, y_true):

@@ -9,7 +9,7 @@ class resnet50(nn.Module):
         super(resnet50, self).__init__()
         self.args = kwargs['args']
         mode = self.args.mode
-        num_classes = self.args.num_classes
+        num_classes = 8 if self.args.task == 'exp' else 2
         rep = self.args.rep
         if rep == 'SSL':
             dir = self.args.model_dir
@@ -48,7 +48,7 @@ class RES_SSL(nn.Module):
         self.args = kwargs['args']
         module = self.args.arch
         mode = self.args.mode
-        num_classes = self.args.num_classes
+        num_classes = 8 if self.args.task == 'exp' else 2
         dir = self.args.model_dir
 
         if module=='resnet18':
